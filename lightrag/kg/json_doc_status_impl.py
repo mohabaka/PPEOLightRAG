@@ -151,16 +151,24 @@ class JsonDocStatusStorage(DocStatusStorage):
         return result
 
     async def index_done_callback(self) -> None:
-        async with self._storage_lock:
-            if self.storage_updated.value:
-                data_dict = (
-                    dict(self._data) if hasattr(self._data, "_getvalue") else self._data
-                )
-                logger.debug(
-                    f"[{self.workspace}] Process {os.getpid()} doc status writting {len(data_dict)} records to {self.namespace}"
-                )
-                write_json(data_dict, self._file_name)
-                await clear_all_update_flags(self.final_namespace)
+       async with self._storage_lock:
+    for doc_id, doc_data in data.items():
+        if "chunks_list" not in doc_data:
+            doc_data["chunks_list"] = []
+        
+        # ✅ Preserve old metadata by merging instead of overwriting
+        existing_data = self._data.get(doc_id, {})
+        old_metadata = existing_data.get("metadata", {})
+        new_metadata = doc_data.get("metadata", {})
+        
+        # Merge old + new (prefer new values if keys conflict)
+        merged_metadata = {**old_metadata, **new_metadata}
+        doc_data["metadata"] = merged_metadata
+
+        self._data[doc_id] = doc_data
+
+    await set_all_update_flags(self.final_namespace)
+
 
     async def upsert(self, data: dict[str, dict[str, Any]]) -> None:
         """
