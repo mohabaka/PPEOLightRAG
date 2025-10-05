@@ -1721,9 +1721,14 @@ def create_document_routes(
     @router.post(
         "/upload", response_model=InsertResponse, dependencies=[Depends(combined_auth)]
     )
-    async def upload_to_input_dir(
-        background_tasks: BackgroundTasks, file: UploadFile = File(...)
-    ):
+    from fastapi import Form
+
+async def upload_to_input_dir(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    metadata: str = Form(None),   # ✅ Added this line
+):
+
         """
         Upload a file to the input directory and index it.
 
@@ -1842,6 +1847,20 @@ def create_document_routes(
                 file_sources=[request.file_source],
                 track_id=track_id,
             )
+# ✅ If metadata is provided, attach it to the file for processing
+if metadata:
+    import json
+    try:
+        parsed_metadata = json.loads(metadata)
+        if not isinstance(parsed_metadata, dict):
+            parsed_metadata = {"raw_metadata": metadata}
+    except Exception:
+        parsed_metadata = {"raw_metadata": metadata}
+
+    # Save metadata JSON next to the file
+    meta_path = str(file_path) + ".meta.json"
+    with open(meta_path, "w", encoding="utf-8") as meta_file:
+        json.dump(parsed_metadata, meta_file, ensure_ascii=False, indent=2)
 
             return InsertResponse(
                 status="success",
